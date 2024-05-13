@@ -1,0 +1,11 @@
+.env
+.env*
+.git
+.mypy_cache
+venv
+opentofu
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
+
+node_modules

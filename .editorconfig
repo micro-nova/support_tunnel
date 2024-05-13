@@ -1,0 +1,29 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# Every file
+[*]
+
+# Set default charset
+charset = utf-8
+
+# 2 space indentation
+indent_size = 2
+indent_style = space
+
+# Ensure a newline is at the end of every file
+insert_final_newline = true
+
+# Remove any extraneous whitespace
+trim_trailing_whitespace = true
+
+[scripts/*]
+end_of_line = lf
+[streams/*]
+end_of_line = lf
+[fw/*.sh]
+end_of_line = lf
+[web/**.jsx]
+indent_size = 4
