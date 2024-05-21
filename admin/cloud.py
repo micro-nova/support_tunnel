@@ -1,3 +1,5 @@
+import logging
+
 from os import getenv
 from typing import Type, cast
 
@@ -15,7 +17,7 @@ SERVICE_ACCOUNT_CREDENTIALS_JSON_FILE = getenv(
     "SERVICE_ACCOUNT_CREDENTIALS_JSON_FILE")
 PROJECT_ID = getenv("PROJECT_ID")
 DATACENTER = getenv("DATACENTER", "us-central1-b")
-ENV = getenv("ENV")
+ENV = getenv("ENV", "prod")
 
 assert PROJECT_ID
 
@@ -64,6 +66,7 @@ def create_ts_instance(tunnel_id: UUID4) -> Node:
     """ Handles creating a tunnel server. """
     # TODO: set up automatic termination.. maybe? or something more sophisticated
     # https://cloud.google.com/compute/docs/instances/limit-vm-runtime#gcloud_1
+    logging.debug(f"creating ts instance for tunnel id {tunnel_id}")
     user_data_template = jinja2_env.get_template(
         "tunnel_server_user_data.sh.j2")
     user_data = user_data_template.render()

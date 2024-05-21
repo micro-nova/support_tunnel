@@ -1,6 +1,6 @@
 import logging
 
-from secrets import token_urlsafe as secret_token
+from secrets import token_hex as secret_token
 from datetime import datetime, timezone, timedelta
 
 from urllib3.util import Retry

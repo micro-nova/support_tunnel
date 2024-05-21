@@ -24,7 +24,7 @@ from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelSer
 
 SUPPORT_TUNNEL_API = getenv(
     "SUPPORT_TUNNEL_API",
-    "https://support-tunnel.prod.gcp.amplipi.com"
+    "https://support-tunnel.prod.gcp.amplipi.com/v1"
 )
 
 ADMIN_AUTH_TOKEN_NAME = getenv(

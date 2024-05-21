@@ -9,6 +9,7 @@ from datetime import datetime
 
 from invoke import task
 from pydantic import UUID4
+from systemd import journal
 from requests import HTTPError
 from sqlmodel import Session, select
 from wireguard_tools import WireguardKey
@@ -31,7 +32,12 @@ TS_WAIT_TIME_SECONDS = int(getenv("TS_WAIT_TIME_SECONDS", 250))
 
 DEBUG = getenv("DEBUG", False)  # any value set here will turn on debug
 
-logging.basicConfig(level=logging.DEBUG if DEBUG else logging.WARNING)
+logging_handlers = [
+  journal.JournalHandler(SYSLOG_IDENTIFIER='support_tunnel'),
+  logging.StreamHandler()
+]
+
+logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO, handlers=logging_handlers)
 
 
 def get_device_tunnel(tunnel_id: UUID4, sesh: Session) -> DeviceTunnel:
@@ -137,7 +143,7 @@ def request_tunnel_details(tunnel_id: UUID4):
                 msg = f"API reported the tunnel has ended. state: {tunnel_details.state}"
                 logging.warn(msg)
                 raise TunnelExpiredException(msg)
-            if tunnel_details.state == TunnelState.running or tunnel_details.state == TunnelState.started:
+            if tunnel_details.state in [TunnelState.running, TunnelState.started]:
                 logging.info("tunnel server running.")
                 logging.debug(f"tunnel_details: {tunnel_details}")
                 break
@@ -180,7 +186,7 @@ def send_connected_status_to_api(t: DeviceTunnel):
 
 
 @task
-def connect(original_context, tunnel_id: UUID4):  # inv CLI cannot provide UUID4s
+def connect(original_context, tunnel_id: UUID4):
     """ Creates a support user and connects to the specified tunnel
         over Wireguard. We use two SQL sessions here in case we end up
         bailing halfway through, and need to clean up user accounts later.
@@ -193,9 +199,9 @@ def connect(original_context, tunnel_id: UUID4):  # inv CLI cannot provide UUID4
     # public key, public ip, port, etc.
     try:
         request_tunnel_details(tunnel_id)
-    except Exception:
-        logging.error("cannot request tunnel details; stopping.")
-        stop(c, tunnel_id)
+    except Exception as e:
+        logging.error("cannot request tunnel details; exiting.")
+        logging.error(f"error: {e}")
         return 1  # TODO: do something better here
 
     # Begin spinning up all our local config. Create a user.
@@ -236,13 +242,10 @@ def connect(original_context, tunnel_id: UUID4):  # inv CLI cannot provide UUID4
 
     except Exception as e:
         logging.error(f"unexpected error: {e}")
-        logging.warning("cleaning up resources...")
-        stop(c, tunnel_id)
+        logging.error(f"exiting.")
         raise e
 
 # step 9: teardown
-
-
 @task
 def stop(c, tunnel_id: UUID4, tunnel_state: TunnelState = TunnelState.completed):
     """ Stops & cleans up device-side resources associated with a tunnel """
@@ -325,3 +328,17 @@ def gc(c):
         tunnels = sesh.exec(stmt).all()
         for t in tunnels:
             stop(c, t.id, TunnelState.timedout)
+
+@task
+def connect_approved_tunnels(c):
+    """ Connects all tunnels that are requested locally and approved+running remotely. """
+    with Session(engine) as sesh:
+        stmt = select(DeviceTunnel)\
+            .where(DeviceTunnel.expires > datetime.now())\
+            .where(DeviceTunnel.state == TunnelState.pending)
+        tunnels = sesh.exec(stmt).all()
+        for t in tunnels:
+            try:
+                connect(c, t.tunnel_id)
+            except Exception as e:
+                logging.error(str(e))
