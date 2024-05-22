@@ -242,7 +242,7 @@ def connect(original_context, tunnel_id: UUID4):
 
     except Exception as e:
         logging.error(f"unexpected error: {e}")
-        logging.error(f"exiting.")
+        logging.error("exiting.")
         raise e
 
 # step 9: teardown
