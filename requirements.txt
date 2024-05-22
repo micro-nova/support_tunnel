@@ -13,7 +13,7 @@ sqlmodel
 tenacity
 SQLAlchemy
 python-jose
-python-systemd
+systemd-python
 apache-libcloud
 wireguard-tools
 google-cloud-secret-manager
