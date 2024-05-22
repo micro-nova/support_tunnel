@@ -73,6 +73,9 @@ def write_wireguard_config(t: WireguardTunnel, c: Union[LocalContext, FabricConn
     wg_config_filelike = io.StringIO(
         t.to_WireguardConfig().to_wgconfig(wgquick_format=True))
     c.put(wg_config_filelike, f"/tmp/{t.interface}.conf")
+    c.run("sudo mkdir -p /etc/wireguard")
+    c.run("sudo chown root:root /etc/wireguard")
+    c.run("sudo chmod 0600 /etc/wireguard")
     c.run(f"sudo mv /tmp/{t.interface}.conf /etc/wireguard/{t.interface}.conf")
     c.run(f"sudo chown root:root /etc/wireguard/{t.interface}.conf")
     c.run(f"sudo chmod 0500 /etc/wireguard/{t.interface}.conf")
