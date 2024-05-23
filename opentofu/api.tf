@@ -186,7 +186,8 @@ resource "google_cloud_run_v2_service" "api" {
     ignore_changes = [
       template["labels"],
       client,
-      client_version
+      client_version,
+      launch_stage
     ]
   }
 }
