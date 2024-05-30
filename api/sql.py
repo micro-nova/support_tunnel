@@ -4,8 +4,10 @@ from os import getenv
 from google.cloud import secretmanager
 from google.cloud.sql.connector import Connector, IPTypes
 
+from common.util import project_id
+
 ENV = getenv("ENV")
-PROJECT_ID = getenv("PROJECT_ID")
+PROJECT_ID = project_id()
 assert ENV
 assert PROJECT_ID
 

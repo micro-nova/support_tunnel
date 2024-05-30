@@ -1,5 +1,9 @@
 import logging
+import configparser
 
+from os import getenv
+from pathlib import Path
+from functools import lru_cache
 from secrets import token_hex as secret_token
 from datetime import datetime, timezone, timedelta
 
@@ -69,3 +73,23 @@ def add_authorized_key(c: Union[LocalContext, Connection], user: SupportUser, au
 def expiry_datetime():
     """ returns a datetime representing an expiry time TUNNEL_EXPIRY_MINS in the the future """
     return datetime.now(timezone.utc) + timedelta(minutes=TUNNEL_EXPIRY_MINS)
+
+def _project_id_from_gcloud_conf(conf_file: Path = Path.home() / Path(".config/gcloud/configurations/config_default")) -> str:
+    """ Gets the GCP project id from a local `gcloud` configuration. """
+    config = configparser.ConfigParser()
+    with open(conf_file, 'rt') as c:
+        config.read_file(c)
+    return config.get('core', 'project')
+
+@lru_cache
+def project_id() -> str:
+    """ Gets the GCP project ID from either an env var, or a local gcloud configuration """
+    try:
+        p = getenv("PROJECT_ID")
+        if not p:
+            p = _project_id_from_gcloud_conf()
+        assert p
+    except Exception as e:
+        logging.error("No usable GCP project ID found. Set the env var PROJECT_ID, or ensure your default `gcloud` configuration is valid.")
+        raise e
+    return p

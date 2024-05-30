@@ -14,7 +14,7 @@ tenacity
 SQLAlchemy
 python-jose
 systemd-python
-apache-libcloud
 wireguard-tools
+google-cloud-compute
 google-cloud-secret-manager
 cloud-sql-python-connector[pymysql]

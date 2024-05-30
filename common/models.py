@@ -59,7 +59,7 @@ class WireguardTunnel(SQLModel):
                 "preshared_key": self.preshared_key,
                 "endpoint_host": p.public_ip,
                 "endpoint_port": p.port,
-                "persistent_keepalive": 29,
+                "persistent_keepalive": 14,
                 "allowed_ips": [self.network]  # TODO: lock this down
             } for p in self.peers]
         }

@@ -124,10 +124,6 @@ def get_tunnel_details(tunnel: DeviceTunnel) -> TunnelServerLaunchDetailsRespons
     logging.debug(f"get_tunnel_details: {res.text}")
     return TunnelServerLaunchDetailsResponse(**json.loads(res.text))
 
-# step 6: req tunnel details based on tunnel id
-# This step is necessary so the device can get the tunnel server's public IP, public key and port.
-
-
 def request_tunnel_details(tunnel_id: UUID4):
     """ Request tunnel details. This will loop until the tunnel is approved and instantiated, or expired."""
     with Session(engine) as sesh:
@@ -171,9 +167,6 @@ def request_tunnel_details(tunnel_id: UUID4):
         sesh.add(t)
         sesh.commit()
 
-# step 8: send details indicating tunnel is instantiated
-
-
 def send_connected_status_to_api(t: DeviceTunnel):
     """ Send connection details back to API. """
     post_data = DeviceTunnelLaunchDetails(**t.dict())
@@ -181,9 +174,6 @@ def send_connected_status_to_api(t: DeviceTunnel):
     res = api.post(f"{SUPPORT_TUNNEL_API}/device/tunnel/details",
                    json=post_data.dict(), headers=auth_headers, timeout=60)
     res.raise_for_status()
-
-# step 7: establish wg tunnel to tunnel server
-
 
 @task
 def connect(original_context, tunnel_id: UUID4):
@@ -245,7 +235,6 @@ def connect(original_context, tunnel_id: UUID4):
         logging.error("exiting.")
         raise e
 
-# step 9: teardown
 @task
 def stop(c, tunnel_id: UUID4, tunnel_state: TunnelState = TunnelState.completed):
     """ Stops & cleans up device-side resources associated with a tunnel """

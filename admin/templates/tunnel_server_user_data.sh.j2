@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Instantiates a tunnel server from a bare Debian 12 image
+# Installs some niceties out of the box from a bare Debian 12 tunnel server
 
-# TODO: remove this once done with active development
-set -x
-
-apt install -y wireguard wireguard-tools fail2ban #apparmor
+apt install -y wireguard wireguard-tools fail2ban apparmor tmux

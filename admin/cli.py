@@ -4,9 +4,9 @@ import logging
 
 from os import getenv
 from time import sleep
-from functools import cache
 from typing import Optional
 from datetime import datetime
+from functools import lru_cache
 
 from pydantic import UUID4
 from ipaddress import IPv4Network
@@ -15,10 +15,10 @@ from google.cloud import secretmanager
 from wireguard_tools import WireguardKey
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-from common.util import api, create_user
 from common.crypto import create_secret_box
 from common.constants import INSTANCE_NAME_PREFIX
-from admin.cloud import create_ts_instance, list_ts_instances
+from common.util import api, create_user, project_id
+from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
 from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelServerLaunchDetails, SupportSecretBoxContents
 
@@ -32,14 +32,13 @@ ADMIN_AUTH_TOKEN_NAME = getenv(
     "support-tunnel-admin-token-prod"
 )
 
-PROJECT_ID = getenv("PROJECT_ID")
-assert PROJECT_ID
+PROJECT_ID = project_id()
 
 DEBUG = getenv("DEBUG", False)  # any value set here will turn on debugging
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.WARNING)
 
 
-@cache
+@lru_cache
 @retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
 def token() -> str:
     """ Gets an API key token from Google Secret Manager, to use to authenticate this service.
@@ -70,7 +69,8 @@ def get_tunnel(tunnel_id) -> Optional[dict]:
 @task
 def get(c, tunnel_id):
     """ Get a single tunnel """
-    print(get_tunnel(tunnel_id))
+    t = get_tunnel(tunnel_id)
+    print(json.dumps(t))
 
 
 @task
@@ -83,8 +83,6 @@ def list(c):
 
 # step 2: launch & configure the tunnel server
 # step 3: POST details back to the API
-
-
 @task
 def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
     """ Create a tunnel server.
@@ -128,7 +126,7 @@ def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
         peers=[device_peer]
     )
 
-    c = Connection(i.public_ips[0])
+    c = Connection(get_ts_instance_public_ip(tunnel_id))
 
     # Configure the cloud instance's tunnel
     write_wireguard_config(t, c)
@@ -149,7 +147,7 @@ def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
     post_data = TunnelServerLaunchDetails(
         tunnel_id=tunnel_id,
         ts_instance_id=i.id,
-        ts_public_ip=i.public_ips[0],
+        ts_public_ip=get_ts_instance_public_ip(tunnel_id),
         ts_wg_public_key=str(t.public_key),
         ts_wg_port=t.port,
         support_secret_box=sb
@@ -196,3 +194,10 @@ def stop(c, tunnel_id):
     res.raise_for_status()
     # being lazy and overzealous at the same time - we'll just garbage-college its resources.
     gc(c)
+
+@task
+def connect(c, tunnel_id):
+    """ Connect to a remote device, identified by a tunnel. """
+    t = get_tunnel(tunnel_id)
+    dip = device_ip(t.network)
+    c.run(f"gcloud compute ssh {t.instance_id} 'sudo -u support {t.support_user}@{dip}'")
