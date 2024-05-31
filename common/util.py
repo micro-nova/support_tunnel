@@ -81,7 +81,7 @@ def _project_id_from_gcloud_conf(conf_file: Path = Path.home() / Path(".config/g
         config.read_file(c)
     return config.get('core', 'project')
 
-@lru_cache
+@lru_cache(1)
 def project_id() -> str:
     """ Gets the GCP project ID from either an env var, or a local gcloud configuration """
     try:

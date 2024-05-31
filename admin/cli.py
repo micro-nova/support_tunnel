@@ -38,7 +38,7 @@ DEBUG = getenv("DEBUG", False)  # any value set here will turn on debugging
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.WARNING)
 
 
-@lru_cache
+@lru_cache(1)
 @retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
 def token() -> str:
     """ Gets an API key token from Google Secret Manager, to use to authenticate this service.
