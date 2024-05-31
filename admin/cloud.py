@@ -95,6 +95,7 @@ def create_ts_instance(tunnel_id: UUID4) -> compute_v1.Instance:
     i.disks = [_create_ts_boot_disk()]
     i.machine_type = f"zones/{ZONE}/machineTypes/{get_instance_size()}"
     i.metadata = _ts_instance_metadata()
+    i.tags = compute_v1.types.Tags(items=["support-tunnel"]) # applies fw rule allowing 22 inbound
 
     # create the request
     req = compute_v1.InsertInstanceRequest()
@@ -120,3 +121,16 @@ def get_ts_instance_public_ip(tunnel_id: UUID4) -> IPv4Address:
     """
     i = get_ts_instance(tunnel_id)
     return IPv4Address(i.network_interfaces[0].access_configs[0].nat_i_p)
+
+def destroy_ts_resources(tunnel_id: UUID4):
+    """ Given a tunnel id, destroy its associated cloud resources.
+
+        Right now, that's just an instance.
+    """
+    compute_client = compute_v1.InstancesClient()
+    operation = compute_client.delete(
+        project=PROJECT_ID,
+        zone=ZONE,
+        instance=f"{INSTANCE_NAME_PREFIX}-{tunnel_id}"
+    )
+    operation.result() # TODO: handle errors better here

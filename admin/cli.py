@@ -3,23 +3,24 @@ import random
 import logging
 
 from os import getenv
+from uuid import UUID
 from time import sleep
 from typing import Optional
 from datetime import datetime
 from functools import lru_cache
 
 from pydantic import UUID4
-from ipaddress import IPv4Network
 from fabric import Connection, task
 from google.cloud import secretmanager
 from wireguard_tools import WireguardKey
+from ipaddress import IPv4Network
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from common.crypto import create_secret_box
 from common.constants import INSTANCE_NAME_PREFIX
 from common.util import api, create_user, project_id
-from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
+from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip, destroy_ts_resources
 from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelServerLaunchDetails, SupportSecretBoxContents
 
 SUPPORT_TUNNEL_API = getenv(
@@ -81,15 +82,22 @@ def list(c):
     res.raise_for_status()
     print(res.text)
 
-# step 2: launch & configure the tunnel server
-# step 3: POST details back to the API
 @task
-def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
+def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[WireguardKey] = None):
     """ Create a tunnel server.
 
         This launches a cloud server, configures it using the device's information,
         and posts further configuration data back to the API.
     """
+    try:
+        if not tunnel_id:
+            tunnel_id = UUID(input('tunnel id: '))
+        if not preshared_key:
+            preshared_key = WireguardKey(input('preshared key: '))
+    except Exception as e:
+        logging.exception(f"could not use the supplied inputs: {str(e)}")
+        return 1
+
     res = api.get(
         f"{SUPPORT_TUNNEL_API}/admin/tunnel/{tunnel_id}", headers=auth_header())
     res.raise_for_status()
@@ -98,6 +106,7 @@ def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
     assert device_details['state'] != 'timedout', "Tunnel has timed out. Please create a new tunnel."
 
     # Create the cloud instance
+    print("creating a tunnel server")
     i = create_ts_instance(tunnel_id)
     # and wait a bit for SSH to come up. This would be nice:
     # https://github.com/fabric/fabric/issues/1808
@@ -105,7 +114,7 @@ def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
 
     # Create our wireguard primitives
     device_peer = WireguardPeer(
-        public_key=device_details['device_wg_public_key'],
+        public_key=WireguardKey(device_details['device_wg_public_key']),
         allowed_ip=device_ip(
             IPv4Network(device_details['network'])
         )
@@ -126,36 +135,48 @@ def create(c, tunnel_id: UUID4, preshared_key: WireguardKey):
         peers=[device_peer]
     )
 
-    c = Connection(get_ts_instance_public_ip(tunnel_id))
+    print("configuring tunnel server")
+    try:
+        c = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
 
-    # Configure the cloud instance's tunnel
-    write_wireguard_config(t, c)
+        # things get hacky when being concerned with local ssh keys and all - 
+        # the below configures things to "just work", every time.
+        c.local("gcloud compute config-ssh", hide="both")
+        user_from_oslogin = c.local("gcloud compute os-login describe-profile --format=json", hide="both")
+        c.user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
 
-    # and start the tunnel
-    start_wireguard_tunnel(t, c)
+        # Configure the cloud instance's tunnel
+        write_wireguard_config(t, c)
 
-    # create a user on the tunnel server
-    u = create_user(c, username="support")
+        # and start the tunnel
+        start_wireguard_tunnel(t, c)
 
-    # create a b64 secretbox with the ssh public key in it
-    plaintext = SupportSecretBoxContents(
-        support_ssh_pubkey=u.ssh_pubkey).model_dump_json()
-    sb = create_secret_box(
-        str(t.private_key), device_details['device_wg_public_key'], plaintext)
+        # create a user on the tunnel server
+        u = create_user(c, username="support")
 
-    # Send our details back to the API
-    post_data = TunnelServerLaunchDetails(
-        tunnel_id=tunnel_id,
-        ts_instance_id=i.id,
-        ts_public_ip=get_ts_instance_public_ip(tunnel_id),
-        ts_wg_public_key=str(t.public_key),
-        ts_wg_port=t.port,
-        support_secret_box=sb
-    ).model_dump_json()
+        # create a b64 secretbox with the ssh public key in it
+        plaintext = SupportSecretBoxContents(
+            support_ssh_pubkey=u.ssh_pubkey).model_dump_json()
+        sb = create_secret_box(
+            str(t.private_key), device_details['device_wg_public_key'], plaintext)
 
-    res = api.post(f"{SUPPORT_TUNNEL_API}/admin/tunnel/details",
-                   data=post_data, timeout=60, headers=auth_header())
-    res.raise_for_status()
+        # Send our details back to the API
+        post_data = TunnelServerLaunchDetails(
+            tunnel_id=tunnel_id,
+            ts_instance_id=str(i.id), # i.id is naturally an int
+            ts_public_ip=get_ts_instance_public_ip(tunnel_id),
+            ts_wg_public_key=str(t.public_key),
+            ts_wg_port=t.port,
+            support_secret_box=sb
+        ).model_dump_json()
+
+        res = api.post(f"{SUPPORT_TUNNEL_API}/admin/tunnel/details",
+                       data=post_data, timeout=60, headers=auth_header())
+        res.raise_for_status()
+    except Exception as e:
+        logging.exception(f"failed to configure tunnel server: {str(e)}")
+        destroy_ts_resources(tunnel_id)
+        raise e
 
 
 @task
@@ -169,7 +190,7 @@ def gc(c):
 
     # find all things expired but not stopped, and stop them
     for t in all_tunnels:
-        if datetime.fromisoformat(t['expires']) < datetime.now() and t.status not in [TunnelState.completed, TunnelState.timedout]:
+        if datetime.fromisoformat(t['expires']) < datetime.now() and t['state'] not in [TunnelState.completed, TunnelState.timedout]:
             print(
                 f"tunnel {t['tunnel_id']} expired {t['expires']}; updating API.")
             api.delete(
@@ -182,8 +203,8 @@ def gc(c):
         t = get_tunnel(tunnel_id)
         if not t or t['state'] in [TunnelState.completed, TunnelState.timedout]:
             print(
-                f"tunnel {tunnel_id} still has running resources. destroying {n.id}")
-            n.destroy()
+                f"tunnel {tunnel_id} may have running resources. destroying {n.id}")
+            destroy_ts_resources(tunnel_id)
 
 
 @task
@@ -198,6 +219,19 @@ def stop(c, tunnel_id):
 @task
 def connect(c, tunnel_id):
     """ Connect to a remote device, identified by a tunnel. """
+    # Care should be exercised here; we're taking data from a remote source and using it to
+    # run shell commands. Validate every last bit of data.
     t = get_tunnel(tunnel_id)
-    dip = device_ip(t.network)
-    c.run(f"gcloud compute ssh {t.instance_id} 'sudo -u support {t.support_user}@{dip}'")
+    assert TunnelState(t['state']) == TunnelState.running, "Device has not yet connected"
+    dip = device_ip(IPv4Network(t['network'])).ip
+    assert t['support_user'].isalnum()
+    assert t['support_user'].isascii()
+    support_user = t['support_user']
+
+    c = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
+    # things get hacky when being concerned with local ssh keys and all - 
+    # the below configures things to "just work", every time.
+    c.local("gcloud compute config-ssh", hide="both")
+    user_from_oslogin = c.local("gcloud compute os-login describe-profile --format=json", hide="both")
+    c.user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
+    c.run(f"sudo -u support ssh -o StrictHostKeyChecking=accept-new -tt {support_user}@{dip}", pty=True)
