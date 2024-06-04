@@ -39,7 +39,7 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
     if not name.isalnum() or not name.isascii():
         raise ValueError("invalid input for user creation")
 
-    c.run(f"sudo useradd -G sudo -s $(which bash) -mU {name}")
+    c.run(f"sudo useradd -g support -s $(which bash) -mU {name}")
     c.run(f"sudo su {name} -c '< /dev/zero ssh-keygen -q -t ed25519 -N \"\" '")
     pubkey = c.run(f"sudo cat /home/{name}/.ssh/id_ed25519.pub")
 
