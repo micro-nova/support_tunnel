@@ -204,6 +204,7 @@ def connect(original_context, tunnel_id: UUID4):
             sesh.commit()
 
             assert t1.ts_wg_public_key
+            assert t1.support_secret_box
             # configure user from secretbox data
             sb = open_secret_box(
                 t1.device_wg_private_key,
@@ -306,6 +307,16 @@ def detail_all_tunnels(c):
         for t in raw_tunnels:
             tunnels.append(json.loads(t.model_dump_json()))
         print(json.dumps(tunnels))
+
+
+def update_local_tunnel_statuses():
+    """ Updates local tunnel statuses from upstream
+    TODO: implement this
+    with Session(engine) as sesh:
+        t = get_device_tunnel(tunnel_id, sesh)
+        tunnel_details = get_tunnel_details(t)
+    """
+    pass
 
 
 @task

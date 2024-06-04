@@ -1,0 +1,14 @@
+name: mypy
+on: 
+  pull_request:
+  push:
+    branches:
+      - main
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install -r requirements.txt
+      - run: pip install mypy
+      - run: mypy --install-types --non-interactive --explicit-package-bases --disable-error-code import-untyped .

@@ -25,7 +25,7 @@ class Tunnel(SQLModel, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     tunnel_id: UUID4
-    state: TunnelState = Field(default='pending')
+    state: TunnelState = Field(default=TunnelState.pending)
     # used for storing case #, customer details, etc
     description: Optional[str]
     created_at: datetime.datetime = Field(

@@ -10,13 +10,17 @@ from pydantic.functional_validators import AfterValidator
 from wireguard_tools import WireguardConfig, WireguardKey
 
 
-class TunnelState(str, Enum):
-    pending = 'pending'  # waiting on admin approval
-    started = 'started'  # tunnel server has launched, waiting for device to connect
-    running = 'running'  # device has started a tunnel, created a user and posted these details
-    connected = 'connected'  # communications are occurring; TODO: is this necessary?
-    completed = 'completed'  # exited successfully
-    timedout = 'timedout'  # the tunnel exceeded its maximum lifetime
+class TunnelState(int, Enum):
+    """ Describes a tunnel state. Behind the scenes, this is represented with integers;
+        this permits us to ensure we never move backwards in this process with simple
+        greater than/less than comparisons.
+    """
+    pending = 10  # waiting on admin approval
+    started = 20  # tunnel server has launched, waiting for device to connect
+    running = 30  # device has started a tunnel, created a user and posted these details
+    connected = 40  # communications are occurring; TODO: actually set & use this state
+    completed = 50  # exited successfully
+    timedout = 60  # the tunnel exceeded its maximum lifetime
 
 
 class WireguardPeer(SQLModel):

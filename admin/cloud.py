@@ -60,9 +60,9 @@ def _create_ts_network_interfaces() -> list[compute_v1.NetworkInterface]:
     netiface.network = f"global/networks/support-tunnel-{ENV}"
     netiface.subnetwork = f"regions/{REGION}/subnetworks/ts-{ENV}"
     access = compute_v1.AccessConfig()
-    access.type_ = compute_v1.AccessConfig.Type.ONE_TO_ONE_NAT.name
+    access.type_ = "ONE_TO_ONE_NAT"
     access.name = "External NAT"
-    access.network_tier = access.NetworkTier.PREMIUM.name
+    access.network_tier = "PREMIUM"
     netiface.access_configs = [access]
     return [netiface]
 

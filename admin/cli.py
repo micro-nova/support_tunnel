@@ -203,7 +203,7 @@ def gc(c):
         t = get_tunnel(tunnel_id)
         if not t or t['state'] in [TunnelState.completed, TunnelState.timedout]:
             print(
-                f"tunnel {tunnel_id} may have running resources. destroying {n.id}")
+                f"tunnel {tunnel_id} may have running resources. destroying instance id {n.id}")
             destroy_ts_resources(tunnel_id)
 
 
