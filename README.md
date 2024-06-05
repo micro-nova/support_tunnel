@@ -57,7 +57,7 @@ fab get $TUNNEL_ID
 fab connect $TUNNEL_ID
 ```
 
-The above takes a while. When it completes though, you should be able to log in to your newly created server in GCP, `sudo su support`, then `ssh $SUPPORT_USERNAME@$DEVICE_IP`. (This side of the process could be improved.)
+The above takes a while. When it completes though, you should be logged in as root on the remote device!
 
 ## Code structure
 * `api/` - all the API server code
