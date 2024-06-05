@@ -93,9 +93,9 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
     """
     try:
         if not tunnel_id:
-            tunnel_id = UUID(input('tunnel id: '))
+            tunnel_id = UUID(input('tunnel id: ').strip())
         if not preshared_key:
-            preshared_key = WireguardKey(input('preshared key: '))
+            preshared_key = WireguardKey(input('preshared key: ').strip())
     except Exception as e:
         logging.exception(f"could not use the supplied inputs: {str(e)}")
         return 1
