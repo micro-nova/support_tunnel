@@ -17,8 +17,8 @@ from ipaddress import IPv4Network
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from common.crypto import create_secret_box
-from common.constants import INSTANCE_NAME_PREFIX
-from common.util import api, create_user, project_id
+from common.constants import INSTANCE_NAME_PREFIX, SSH_KEYFILE_PATH
+from common.util import api, create_user, project_id, create_sshkey
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
 from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip, destroy_ts_resources
 from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelServerLaunchDetails, SupportSecretBoxContents
@@ -104,14 +104,14 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
     device_details = json.loads(res.text)
     assert device_details['state'] < TunnelState.completed, "Tunnel has completed. Please create a new tunnel."
 
-    try:
-        # Create the cloud instance
-        print("creating a tunnel server")
-        i = create_ts_instance(tunnel_id)
-        # and wait a bit for SSH to come up. This would be nice:
-        # https://github.com/fabric/fabric/issues/1808
-        sleep(60)  # seconds
+    # Create the cloud instance
+    print("creating a tunnel server")
+    i = create_ts_instance(tunnel_id)
+    # and wait a bit for SSH to come up. This would be nice:
+    # https://github.com/fabric/fabric/issues/1808
+    sleep(60)  # seconds
 
+    try:
         # Create our wireguard primitives
         device_peer = WireguardPeer(
             public_key=WireguardKey(device_details['device_wg_public_key']),
@@ -136,26 +136,29 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
         )
 
         print("configuring tunnel server")
-        c = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
+        ts = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
 
         # things get hacky when being concerned with local ssh keys and all - 
         # the below configures things to "just work", every time.
-        c.local("gcloud compute config-ssh", hide="both")
-        user_from_oslogin = c.local("gcloud compute os-login describe-profile --format=json", hide="both")
-        c.user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
+        c.run("gcloud compute config-ssh", hide="both")
+        user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
+        ts.user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
 
         # Configure the cloud instance's tunnel
-        write_wireguard_config(t, c)
+        write_wireguard_config(ts, t)
 
         # and start the tunnel
-        start_wireguard_tunnel(t, c)
+        start_wireguard_tunnel(ts, t)
 
-        # create a user on the tunnel server
-        u = create_user(c, username="support")
+        # create our shared ssh key
+        ssh_pubkey = create_sshkey(c)
 
         # create a b64 secretbox with the ssh public key in it
+        # using a secretbox, encrypted with this TS's privkey and the device's pubkey,
+        # ensures it only could have come from here. (why not a signature instead?
+        # pynacl implementation details, mostly.)
         plaintext = SupportSecretBoxContents(
-            support_ssh_pubkey=u.ssh_pubkey).model_dump_json()
+            support_ssh_pubkey=ssh_pubkey).model_dump_json()
         sb = create_secret_box(
             str(t.private_key), device_details['device_wg_public_key'], plaintext)
 
@@ -227,10 +230,26 @@ def connect(c, tunnel_id):
     assert t['support_user'].isascii()
     support_user = t['support_user']
 
-    c = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
-    # things get hacky when being concerned with local ssh keys and all - 
-    # the below configures things to "just work", every time.
-    c.local("gcloud compute config-ssh", hide="both")
-    user_from_oslogin = c.local("gcloud compute os-login describe-profile --format=json", hide="both")
-    c.user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
-    c.run(f"sudo -u support ssh -o StrictHostKeyChecking=accept-new -tt {support_user}@{dip}", pty=True)
+    # set up local
+    c.run("gcloud compute config-ssh", hide="both")
+    user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
+    ts_user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
+
+    # set up connection to bastion
+    gw = Connection(
+        host = str(get_ts_instance_public_ip(tunnel_id)),
+        user = ts_user
+    )
+
+    # set up connection to destination device
+    device = Connection(
+        host=str(dip),
+        user=support_user,
+        gateway=gw,
+        connect_kwargs = {
+            "key_filename": str(SSH_KEYFILE_PATH),
+        }
+    )
+
+    # and finally execute a shell
+    device.sudo("/bin/bash", pty=True)

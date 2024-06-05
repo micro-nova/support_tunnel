@@ -218,10 +218,10 @@ def connect(original_context, tunnel_id: UUID4):
             t2 = get_device_tunnel(tunnel_id, sesh)
 
             # create our config
-            write_wireguard_config(t2.to_WireguardTunnel(), c)
+            write_wireguard_config(c, t2.to_WireguardTunnel())
 
             # and start it
-            start_wireguard_tunnel(t2.to_WireguardTunnel(), c)
+            start_wireguard_tunnel(c, t2.to_WireguardTunnel())
 
             t2.state = TunnelState.running
             sesh.add(t2)

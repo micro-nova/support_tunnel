@@ -66,7 +66,7 @@ def allocate_address_space() -> IPv4Network:
     raise Exception("No usable networks found.")
 
 
-def write_wireguard_config(t: WireguardTunnel, c: Union[LocalContext, FabricConnection]):
+def write_wireguard_config(c: Union[LocalContext, FabricConnection], t: WireguardTunnel):
     """ Writes a wireguard config to disk. """
     logging.debug(
         f"writing wireguard config for interface {t.interface} to disk...")
@@ -81,7 +81,7 @@ def write_wireguard_config(t: WireguardTunnel, c: Union[LocalContext, FabricConn
     c.run(f"sudo chmod 0500 /etc/wireguard/{t.interface}.conf")
 
 
-def start_wireguard_tunnel(t: WireguardTunnel, c: Union[LocalContext, FabricConnection]):
+def start_wireguard_tunnel(c: Union[LocalContext, FabricConnection], t: WireguardTunnel):
     """ Starts a wireguard tunnel using an invoke context. The
         invoke context allows this to be run on local or remote.
         This assumes the host in question has a local wireguard config already.

@@ -159,4 +159,3 @@ class SupportUser(SQLModel):
     """ Represents a support user. """
     username: str
     group: str
-    ssh_pubkey: str  # this is their own pubkey, not an authorized_keys entry

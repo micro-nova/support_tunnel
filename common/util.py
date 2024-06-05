@@ -15,7 +15,7 @@ from typing import Union, Optional
 
 from common.models import SupportUser
 from device.local_context import LocalContext
-from common.constants import TUNNEL_EXPIRY_MINS
+from common.constants import TUNNEL_EXPIRY_MINS, SSH_KEYFILE_PATH
 
 api = Session()
 retries = Retry(
@@ -34,6 +34,15 @@ def create_group(c: Union[LocalContext, Connection], group_name: str = "support"
     # exist.
     c.run(f"sudo groupadd -f {group_name}")
 
+def create_sshkey(c: Union[LocalContext, Connection], dest: Path = SSH_KEYFILE_PATH) -> str:
+    """ Creates an SSH pub/priv keypair and places them at the specified destination. Returns the pubkey"""
+    c.sudo(f"mkdir -p {str(dest.parent)}")
+    c.sudo(f"< /dev/zero ssh-keygen -q -t ed25519 -N \"\" -f {str(dest)}")
+    c.sudo(f"chmod 0666 {str(dest)}*") #TODO: tighten this up. May involve significant changes in how we tunnel
+    pubkey = c.run(f"cat {str(dest)}.pub")
+    assert pubkey
+    return pubkey.stdout
+
 def create_user(c: Union[LocalContext, Connection], username: Optional[str] = None, username_prefix: str = "support", group_name: str = "support") -> SupportUser:
     """ Creates a user for support to use. """
     logging.debug("creating a Unix user")
@@ -50,12 +59,8 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
     create_group(c)
 
     c.run(f"sudo useradd -g {group_name} -s $(which bash) -m {name}")
-    c.run(f"sudo su {name} -c '< /dev/zero ssh-keygen -q -t ed25519 -N \"\" '")
-    pubkey = c.run(f"sudo cat /home/{name}/.ssh/id_ed25519.pub")
 
-    assert pubkey  # TODO: do better error checking here. why does mypy think
-    # this can eval to Union[Result, Any, None] ?
-    return SupportUser(username=name, group=group_name, ssh_pubkey=pubkey.stdout)
+    return SupportUser(username=name, group=group_name)
 
 
 def delete_user(c: Union[LocalContext, Connection], username: str):
