@@ -36,9 +36,10 @@ def create_group(c: Union[LocalContext, Connection], group_name: str = "support"
 
 def create_sshkey(c: Union[LocalContext, Connection], dest: Path = SSH_KEYFILE_PATH) -> str:
     """ Creates an SSH pub/priv keypair and places them at the specified destination. Returns the pubkey"""
-    c.sudo(f"mkdir -p {str(dest.parent)}")
-    c.sudo(f"< /dev/zero ssh-keygen -q -t ed25519 -N \"\" -f {str(dest)}")
-    c.sudo(f"chmod 0666 {str(dest)}*") #TODO: tighten this up. May involve significant changes in how we tunnel
+    c.run(f"sudo mkdir -p {str(dest.parent)}")
+    c.run(f"sudo chmod 0777 {str(dest.parent)}")
+    c.run(f"< /dev/zero ssh-keygen -q -t ed25519 -N \"\" -f {str(dest)}")
+    c.run(f"chmod 0666 {str(dest)}*") #TODO: tighten this up. May involve significant changes in how we tunnel
     pubkey = c.run(f"cat {str(dest)}.pub")
     assert pubkey
     return pubkey.stdout
@@ -78,6 +79,7 @@ def delete_user(c: Union[LocalContext, Connection], username: str):
 
 def add_authorized_key(c: Union[LocalContext, Connection], user: SupportUser, authorized_key: str):
     """ Add an authorized key to a user. """
+    c.run(f"sudo mkdir -p /home/{user.username}/.ssh")
     c.run(
         f"echo '{authorized_key}' | sudo tee -a /home/{user.username}/.ssh/authorized_keys")
     c.run(

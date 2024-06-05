@@ -322,6 +322,8 @@ def update_local_tunnel_statuses():
 @task
 def gc(c):
     """ Garbage collects all resources associated with old tunnels. """
+    # add just a bit of jitter so we don't blast the API service with a ton of cronjobs
+    sleep(random.randint(0,20))
     with Session(engine) as sesh:
         stmt = select(DeviceTunnel).where(
             DeviceTunnel.expires < datetime.now())
@@ -332,6 +334,8 @@ def gc(c):
 @task
 def connect_approved_tunnels(c):
     """ Connects all tunnels that are requested locally and approved+running remotely. """
+    # add just a bit of jitter so we don't blast the API service with a ton of cronjobs
+    sleep(random.randint(0,20))
     with Session(engine) as sesh:
         stmt = select(DeviceTunnel)\
             .where(DeviceTunnel.expires > datetime.now())\

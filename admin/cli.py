@@ -18,7 +18,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 
 from common.crypto import create_secret_box
 from common.constants import INSTANCE_NAME_PREFIX, SSH_KEYFILE_PATH
-from common.util import api, create_user, project_id, create_sshkey
+from common.util import api, project_id, create_sshkey
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
 from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip, destroy_ts_resources
 from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelServerLaunchDetails, SupportSecretBoxContents
@@ -151,7 +151,7 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
         start_wireguard_tunnel(ts, t)
 
         # create our shared ssh key
-        ssh_pubkey = create_sshkey(c)
+        ssh_pubkey = create_sshkey(ts)
 
         # create a b64 secretbox with the ssh public key in it
         # using a secretbox, encrypted with this TS's privkey and the device's pubkey,
