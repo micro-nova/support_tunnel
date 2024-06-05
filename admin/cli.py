@@ -177,6 +177,9 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
         res = api.post(f"{SUPPORT_TUNNEL_API}/admin/tunnel/details",
                        data=post_data, timeout=60, headers=auth_header())
         res.raise_for_status()
+
+        print("tunnel server created! It may take up to 5 minutes for the remote device to check back in, but when it does you can run the following command to log into it:")
+        print(f"fab connect {tunnel_id}")
     except Exception as e:
         logging.exception(f"failed to configure tunnel server: {str(e)}")
         destroy_ts_resources(tunnel_id)
