@@ -1,3 +1,4 @@
+import io
 import json
 import random
 import logging
@@ -10,15 +11,16 @@ from datetime import datetime
 from functools import lru_cache
 
 from pydantic import UUID4
+from paramiko.ed25519key import Ed25519Key
+from ipaddress import IPv4Network
 from fabric import Connection, task
 from google.cloud import secretmanager
 from wireguard_tools import WireguardKey
-from ipaddress import IPv4Network
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from common.crypto import create_secret_box
-from common.constants import INSTANCE_NAME_PREFIX, SSH_KEYFILE_PATH
 from common.util import api, project_id, create_sshkey
+from common.constants import INSTANCE_NAME_PREFIX, SSH_KEYFILE_PATH
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
 from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip, destroy_ts_resources
 from common.models import TunnelState, WireguardTunnel, WireguardPeer, TunnelServerLaunchDetails, SupportSecretBoxContents
@@ -241,13 +243,17 @@ def connect(c, tunnel_id):
         user = ts_user
     )
 
+    # grab the ssh private key on the tunnel server
+    ssh_privkey = gw.run(f"sudo cat {SSH_KEYFILE_PATH}", hide="both")
+    assert ssh_privkey
+
     # set up connection to destination device
     device = Connection(
         host=str(dip),
         user=support_user,
         gateway=gw,
         connect_kwargs = {
-            "key_filename": str(SSH_KEYFILE_PATH),
+            "pkey": Ed25519Key.from_private_key(io.StringIO(ssh_privkey.stdout)),
         }
     )
 
