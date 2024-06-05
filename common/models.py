@@ -25,10 +25,15 @@ class TunnelState(int, Enum):
 
 class WireguardPeer(SQLModel):
     """ This generic class represents a peer, to be used on one side of a wireguard tunnel """
-    public_key: str
+    public_key: Union[str, WireguardKey]
     allowed_ip: Union[IPv4Address, IPv4Network]
     port: Optional[int] = None
     public_ip: Optional[IPv4Address] = None
+
+    model_config = SQLModelConfig(arbitrary_types_allowed=True)
+    @field_serializer('public_key')
+    def serialize_key(self, k: WireguardKey, _info):
+        return str(k)
 
 
 class WireguardTunnel(SQLModel):
@@ -153,4 +158,5 @@ class SupportSecretBoxContents(SQLModel):
 class SupportUser(SQLModel):
     """ Represents a support user. """
     username: str
+    group: str
     ssh_pubkey: str  # this is their own pubkey, not an authorized_keys entry

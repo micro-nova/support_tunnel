@@ -102,41 +102,40 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
         f"{SUPPORT_TUNNEL_API}/admin/tunnel/{tunnel_id}", headers=auth_header())
     res.raise_for_status()
     device_details = json.loads(res.text)
-    assert device_details['state'] != 'completed', "Tunnel has completed. Please create a new tunnel."
-    assert device_details['state'] != 'timedout', "Tunnel has timed out. Please create a new tunnel."
+    assert device_details['state'] < TunnelState.completed, "Tunnel has completed. Please create a new tunnel."
 
-    # Create the cloud instance
-    print("creating a tunnel server")
-    i = create_ts_instance(tunnel_id)
-    # and wait a bit for SSH to come up. This would be nice:
-    # https://github.com/fabric/fabric/issues/1808
-    sleep(60)  # seconds
-
-    # Create our wireguard primitives
-    device_peer = WireguardPeer(
-        public_key=WireguardKey(device_details['device_wg_public_key']),
-        allowed_ip=device_ip(
-            IPv4Network(device_details['network'])
-        )
-    )
-    private_key = WireguardKey.generate()
-    t = WireguardTunnel(
-        interface=f"support-{random.randint(10,9999)}",
-        private_key=private_key,
-        public_key=private_key.public_key(),
-        my_ip=server_ip(
-            IPv4Network(device_details['network'])
-        ),
-        network=IPv4Network(device_details['network']),
-        preshared_key=WireguardKey(preshared_key),
-        # the below port range is also defined in the firewall rules for the hosts
-        # in opentofu
-        port=random.randint(20000, 65534),
-        peers=[device_peer]
-    )
-
-    print("configuring tunnel server")
     try:
+        # Create the cloud instance
+        print("creating a tunnel server")
+        i = create_ts_instance(tunnel_id)
+        # and wait a bit for SSH to come up. This would be nice:
+        # https://github.com/fabric/fabric/issues/1808
+        sleep(60)  # seconds
+
+        # Create our wireguard primitives
+        device_peer = WireguardPeer(
+            public_key=WireguardKey(device_details['device_wg_public_key']),
+            allowed_ip=device_ip(
+                IPv4Network(device_details['network'])
+            )
+        )
+        private_key = WireguardKey.generate()
+        t = WireguardTunnel(
+            interface=f"support-{random.randint(10,9999)}",
+            private_key=private_key,
+            public_key=private_key.public_key(),
+            my_ip=server_ip(
+                IPv4Network(device_details['network'])
+            ),
+            network=IPv4Network(device_details['network']),
+            preshared_key=WireguardKey(preshared_key),
+            # the below port range is also defined in the firewall rules for the hosts
+            # in opentofu
+            port=random.randint(20000, 65534),
+            peers=[device_peer]
+        )
+
+        print("configuring tunnel server")
         c = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
 
         # things get hacky when being concerned with local ssh keys and all - 

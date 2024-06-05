@@ -26,10 +26,17 @@ retries = Retry(
 )
 api.mount("https://", HTTPAdapter(max_retries=retries))
 
+def create_group(c: Union[LocalContext, Connection], group_name: str = "support"):
+    """ Creates a group for the support user(s). """
+    logging.debug(f"creating a Unix group: {group_name}")
+    # -f allows this command to complete successfully if this group already exists.
+    # We do not clean this group up on tunnel teardown, lest other concurrent tunnels
+    # exist.
+    c.run(f"sudo groupadd -f {group_name}")
 
-def create_user(c: Union[LocalContext, Connection], username: Optional[str] = None, username_prefix: str = "support") -> SupportUser:
+def create_user(c: Union[LocalContext, Connection], username: Optional[str] = None, username_prefix: str = "support", group_name: str = "support") -> SupportUser:
     """ Creates a user for support to use. """
-    logging.debug("creating a user")
+    logging.debug("creating a Unix user")
     if username:
         name = username
     else:
@@ -37,15 +44,18 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
 
     # TODO: better sanitize input
     if not name.isalnum() or not name.isascii():
-        raise ValueError("invalid input for user creation")
+        raise ValueError(f"invalid input for user creation: {name}")
 
-    c.run(f"sudo useradd -g support -s $(which bash) -mU {name}")
+    # Because we have an explicit dependency on the specified group existing, we call create_group() here.
+    create_group(c)
+
+    c.run(f"sudo useradd -g {group_name} -s $(which bash) -m {name}")
     c.run(f"sudo su {name} -c '< /dev/zero ssh-keygen -q -t ed25519 -N \"\" '")
     pubkey = c.run(f"sudo cat /home/{name}/.ssh/id_ed25519.pub")
 
     assert pubkey  # TODO: do better error checking here. why does mypy think
     # this can eval to Union[Result, Any, None] ?
-    return SupportUser(username=name, ssh_pubkey=pubkey.stdout)
+    return SupportUser(username=name, group=group_name, ssh_pubkey=pubkey.stdout)
 
 
 def delete_user(c: Union[LocalContext, Connection], username: str):
@@ -66,7 +76,7 @@ def add_authorized_key(c: Union[LocalContext, Connection], user: SupportUser, au
     c.run(
         f"echo '{authorized_key}' | sudo tee -a /home/{user.username}/.ssh/authorized_keys")
     c.run(
-        f"sudo chown {user.username}:{user.username} /home/{user.username}/.ssh/authorized_keys")
+        f"sudo chown {user.username}:{user.group} /home/{user.username}/.ssh/authorized_keys")
     c.run(f"sudo chmod 0600 /home/{user.username}/.ssh/authorized_keys")
 
 

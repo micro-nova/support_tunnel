@@ -52,8 +52,9 @@ To note, your public key may live someplace else or be in a different format; pl
 ```
 fab --list # see what commands are available
 # create the tunnel server, using the preshared key and tunnel id from the device
-fab create $TUNNEL_ID $PRESHARED_KEY
+fab create
 fab get $TUNNEL_ID
+fab connect $TUNNEL_ID
 ```
 
 The above takes a while. When it completes though, you should be able to log in to your newly created server in GCP, `sudo su support`, then `ssh $SUPPORT_USERNAME@$DEVICE_IP`. (This side of the process could be improved.)

@@ -127,10 +127,14 @@ def destroy_ts_resources(tunnel_id: UUID4):
 
         Right now, that's just an instance.
     """
+    logging.warning(f"destroying resources associated with tunnel id {tunnel_id}")
     compute_client = compute_v1.InstancesClient()
-    operation = compute_client.delete(
-        project=PROJECT_ID,
-        zone=ZONE,
-        instance=f"{INSTANCE_NAME_PREFIX}-{tunnel_id}"
-    )
-    operation.result() # TODO: handle errors better here
+    try:
+        operation = compute_client.delete(
+            project=PROJECT_ID,
+            zone=ZONE,
+            instance=f"{INSTANCE_NAME_PREFIX}-{tunnel_id}"
+        )
+        operation.result() # TODO: handle errors better here
+    except Exception as e:
+        logging.warning(f"failed to delete cloud instance for tunnel id {tunnel_id}: {str(e)}")
