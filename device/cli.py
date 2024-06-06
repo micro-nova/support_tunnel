@@ -17,7 +17,7 @@ from wireguard_tools import WireguardKey
 from common.crypto import open_secret_box
 from device.local_context import LocalContext
 from device.models import DeviceTunnel, engine
-from common.exceptions import TunnelExpiredException
+from common.exceptions import TunnelExpiredException, InvalidTunnelStateException
 from common.util import api, create_user, delete_user, add_authorized_key
 from common.tunnel import allocate_address_space, write_wireguard_config, start_wireguard_tunnel
 from common.models import TunnelRequest, TunnelRequestTokenData, Token, TunnelServerLaunchDetailsResponse, DeviceTunnelLaunchDetails, TunnelState
@@ -26,9 +26,6 @@ SUPPORT_TUNNEL_API = getenv(
     "SUPPORT_TUNNEL_API",
     "https://support-tunnel.prod.gcp.amplipi.com/v1/"
 )
-
-# How long to wait for a tunnel approval
-TS_WAIT_TIME_SECONDS = int(getenv("TS_WAIT_TIME_SECONDS", 250))
 
 DEBUG = getenv("DEBUG", False)  # any value set here will turn on debug
 
@@ -124,29 +121,20 @@ def get_tunnel_details(tunnel: DeviceTunnel) -> TunnelServerLaunchDetailsRespons
     logging.debug(f"get_tunnel_details: {res.text}")
     return TunnelServerLaunchDetailsResponse(**json.loads(res.text))
 
-def request_tunnel_details(tunnel_id: UUID4):
-    """ Request tunnel details. This will loop until the tunnel is approved and instantiated, or expired."""
+def request_tunnel_server_details(tunnel_id: UUID4):
+    """ Request tunnel server details. Bails if the tunnel server has not launched yet."""
     with Session(engine) as sesh:
         t = get_device_tunnel(tunnel_id, sesh)
         tunnel_details = get_tunnel_details(t)
-        while True:
-            # At the very most, the tunnel should expire when the JWT the server hands out expires.
-            if t.expires < datetime.now():
-                msg = "Tunnel has expired."
-                logging.warn(msg)
-                raise TunnelExpiredException(msg)
-            if tunnel_details.state in [TunnelState.completed, TunnelState.timedout]:
-                msg = f"API reported the tunnel has ended. state: {tunnel_details.state}"
-                logging.warn(msg)
-                raise TunnelExpiredException(msg)
-            if tunnel_details.state in [TunnelState.running, TunnelState.started]:
-                logging.info("tunnel server running.")
-                logging.debug(f"tunnel_details: {tunnel_details}")
-                break
-            logging.info(
-                f"tunnel server not ready. status: {tunnel_details.state}. waiting {TS_WAIT_TIME_SECONDS}s...")
-            sleep(TS_WAIT_TIME_SECONDS)
-            tunnel_details = get_tunnel_details(t)
+
+    # At the very most, the tunnel should expire when the JWT the server hands out expires.
+    if t.expires < datetime.now():
+        msg = "Tunnel has expired."
+        logging.warn(msg)
+        raise TunnelExpiredException(msg)
+    if tunnel_details.state not in [TunnelState.started, TunnelState.running, TunnelState.connected]:
+        logging.info(f"tunnel server not ready. status: {tunnel_details.state}")
+        raise InvalidTunnelStateException(f"Cannot use tunnel server in this state: {tunnel_details.state}")
 
     # At this point, the tunnel server has communicated back. We should have all the following
     # in the API's database; assert that our response from the API has actually given us this.
@@ -188,7 +176,7 @@ def connect(original_context, tunnel_id: UUID4):
     # Get tunnel server details from upstream. This will have the tunnel server's
     # public key, public ip, port, etc.
     try:
-        request_tunnel_details(tunnel_id)
+        request_tunnel_server_details(tunnel_id)
     except Exception as e:
         logging.error("cannot request tunnel details; exiting.")
         logging.error(f"error: {e}")

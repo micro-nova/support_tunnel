@@ -138,7 +138,10 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
         )
 
         print("configuring tunnel server")
-        ts = Connection(str(get_ts_instance_public_ip(tunnel_id)), connect_timeout=180)
+        ts = Connection(
+            host=str(get_ts_instance_public_ip(tunnel_id)),
+            connect_kwargs={"auth_timeout": 120} # long for 2FA
+        )
 
         # things get hacky when being concerned with local ssh keys and all - 
         # the below configures things to "just work", every time.
@@ -241,20 +244,21 @@ def connect(c, tunnel_id):
     ts_user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
 
     # set up connection to bastion
-    gw = Connection(
+    ts = Connection(
         host = str(get_ts_instance_public_ip(tunnel_id)),
-        user = ts_user
+        user = ts_user,
+        connect_kwargs={"auth_timeout": 120} # long for 2FA
     )
 
     # grab the ssh private key on the tunnel server
-    ssh_privkey = gw.run(f"sudo cat {SSH_KEYFILE_PATH}", hide="both")
+    ssh_privkey = ts.run(f"sudo cat {SSH_KEYFILE_PATH}", hide="both")
     assert ssh_privkey
 
     # set up connection to destination device
     device = Connection(
         host=str(dip),
         user=support_user,
-        gateway=gw,
+        gateway=ts,
         connect_kwargs = {
             "pkey": Ed25519Key.from_private_key(io.StringIO(ssh_privkey.stdout)),
         }

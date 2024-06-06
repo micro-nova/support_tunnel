@@ -20,6 +20,7 @@ First, if this is a greenfield deployment, launch the cloud network and an insta
 
 Then, on both the device you'd like a tunnel on and on your admin computer:
 ```
+apt install libsystemd-dev wireguard wireguard-tools
 git clone https://github.com/micro-nova/support_tunnel
 pushd support_tunnel
 python3 -m venv venv
@@ -44,7 +45,7 @@ On your `admin`, you probably need to log in to a cloud provider so you can star
 ```
 gcloud init
 gcloud auth application-default login
-gcloud compute os-login ssh-keys add --ttl=120d --key-file=~/.ssh/id_ed25519.pub
+gcloud compute os-login ssh-keys add --ttl=120d --key-file=$(realpath ~/.ssh/id_ed25519.pub)
 ```
 To note, your public key may live someplace else or be in a different format; please modify the command to suit. Also to note - authenticating to tunnel servers will fail unless you have 2FA configured on your Google account. Please [configure 2FA](https://support.google.com/accounts/answer/185839).
 
