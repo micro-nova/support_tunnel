@@ -345,7 +345,7 @@ def gc(c):
             DeviceTunnel.expires < datetime.now())
         tunnels = sesh.exec(stmt).all()
         for t in tunnels:
-            stop(c, t.id, TunnelState.timedout)
+            stop(c, t.tunnel_id, TunnelState.timedout)
 
 @task
 def connect_approved_tunnels(c):
