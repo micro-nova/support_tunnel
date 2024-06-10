@@ -36,6 +36,15 @@ logging_handlers = [
 
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO, handlers=logging_handlers)
 
+def print_log_error(e: Exception, msg: str):
+    """ Little helper function to emit errors to both stdout and logging.
+        This is helpful for cases where tasks are run as invoke commands and
+        there is a service that consumes stdout - for example, `request`.
+    """
+    error_msg = f"{msg}: {e}"
+    logging.error(error_msg)
+    print(error_msg)
+
 
 def get_device_tunnel(tunnel_id: UUID4, sesh: Session) -> DeviceTunnel:
     """ Utility function to return a device tunnel instance from the DB """
@@ -51,64 +60,83 @@ def request(c) -> UUID4:
 
         Returns the tunnel_id.
     """
-    logging.info("generating wireguard keys & allocating address space.")
-    device_wg_private_key = WireguardKey.generate()
-    device_wg_public_key = device_wg_private_key.public_key()
-    network = allocate_address_space()
-
-    logging.info(f"sending tunnel request to {SUPPORT_TUNNEL_API}")
-    post_data = TunnelRequest(
-        device_wg_public_key=str(device_wg_public_key),
-        network=network
-    ).model_dump_json()
-    logging.debug(f"post_data: {post_data}")
     try:
+        logging.info("generating wireguard keys & allocating address space.")
+        device_wg_private_key = WireguardKey.generate()
+        device_wg_public_key = device_wg_private_key.public_key()
+        network = allocate_address_space()
+    except Exception as e:
+        print_log_error(e, "could not create wg primitives")
+        raise e
+
+    try:
+        logging.info(f"sending tunnel request to {SUPPORT_TUNNEL_API}")
+        post_data = TunnelRequest(
+            device_wg_public_key=str(device_wg_public_key),
+            network=network
+        ).model_dump_json()
+        logging.debug(f"post_data: {post_data}")
         res = api.post(
             f"{SUPPORT_TUNNEL_API}/device/tunnel/request", data=post_data, timeout=60)
         res.raise_for_status()
     except HTTPError as e:
-        logging.error(f"{res.reason}: {res.text}")
+        print_log_error(e, f"could not POST request: {res.reason}, {res.text}")
+        raise e
+    except Exception as e:
+        print_log_error(e, "could not request a tunnel")
         raise e
 
-    # We get a jwt back from the server; this identifies our session.
-    token = Token(**json.loads(res.text))
-    loaded_response = TunnelRequestTokenData(
-        **jwt.get_unverified_claims(token.access_token))
+    try:
+        # We get a jwt back from the server; this identifies our session.
+        token = Token(**json.loads(res.text))
+        loaded_response = TunnelRequestTokenData(
+            **jwt.get_unverified_claims(token.access_token))
 
-    # TODO: better data validation here; perhaps make these two derived values/methods off the token
-    # removeprefix() was introduced in Python 3.9; uncomment this when we upgrade on AmpliPi
-    # tunnel_id = loaded_response.sub.removeprefix("tunnel_id:")
-    tunnel_id = loaded_response.sub[len("tunnel_id:"):]
-    expires = datetime.fromtimestamp(loaded_response.exp)
-    logging.debug(f"tunnel_id: {tunnel_id}, expires: {expires}")
+        # TODO: better data validation here; perhaps make these two derived values/methods off the token
+        # removeprefix() was introduced in Python 3.9; uncomment this when we upgrade on AmpliPi
+        # tunnel_id = loaded_response.sub.removeprefix("tunnel_id:")
+        tunnel_id = loaded_response.sub[len("tunnel_id:"):]
+        expires = datetime.fromtimestamp(loaded_response.exp)
+        logging.debug(f"tunnel_id: {tunnel_id}, expires: {expires}")
+    except Exception as e:
+        print_log_error(e, "unable to set token data")
+        raise e
 
     # last bits of config
     # wireguard preshared keys take the exact format as private keys
     # ref: https://git.zx2c4.com/wireguard-tools/tree/src/wg.c?id=13f4ac4cb74b5a833fa7f825ba785b1e5774e84f#n27
-    logging.info("generating preshared key, port, interface")
-    wg_preshared_key = str(WireguardKey.generate())
-    interface = f"support-{random.randint(10,99999)}"
-    port = random.randint(20000, 65534)
+    try:
+        logging.info("generating preshared key, port, interface")
+        wg_preshared_key = str(WireguardKey.generate())
+        interface = f"support-{random.randint(10,99999)}"
+        port = random.randint(20000, 65534)
+    except Exception as e:
+        print_log_error(e, "unable to generate wg psk/iface/port")
+        raise e
 
-    logging.info(
-        "creating a DeviceTunnel instance and saving it to the database")
-    t = DeviceTunnel(
-        tunnel_id=tunnel_id,
-        interface=interface,
-        device_wg_public_key=str(device_wg_public_key),
-        device_wg_private_key=str(device_wg_private_key),
-        wg_preshared_key=wg_preshared_key,
-        token=token.access_token,
-        expires=expires,
-        network=str(network),
-        port=port
-    )
-    with Session(engine) as sesh:
-        sesh.add(t)
-        sesh.commit()
-        print(f"tunnel_id: {t.tunnel_id}")
-        print(f"preshared_key: {wg_preshared_key}")
-        return t.tunnel_id
+    try:
+        logging.info(
+            "creating a DeviceTunnel instance and saving it to the database")
+        t = DeviceTunnel(
+            tunnel_id=tunnel_id,
+            interface=interface,
+            device_wg_public_key=str(device_wg_public_key),
+            device_wg_private_key=str(device_wg_private_key),
+            wg_preshared_key=wg_preshared_key,
+            token=token.access_token,
+            expires=expires,
+            network=str(network),
+            port=port
+        )
+        with Session(engine) as sesh:
+            sesh.add(t)
+            sesh.commit()
+            print(f"tunnel_id: {t.tunnel_id}")
+            print(f"preshared_key: {wg_preshared_key}")
+            return t.tunnel_id
+    except Exception as e:
+        print_log_error(e, "unable to save DeviceTunnel to db")
+        raise e
 
 
 def get_tunnel_details(tunnel: DeviceTunnel) -> TunnelServerLaunchDetailsResponse:
