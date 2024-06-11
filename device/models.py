@@ -1,15 +1,17 @@
+import os
+import stat
+import logging
 import datetime
 import common.tunnel
 import common.models
 
-from os import getenv
-from sqlmodel import Field, SQLModel, create_engine
+from grp import getgrnam
 from pydantic import UUID4
 from typing import Optional
-from ipaddress import IPv4Address, IPv4Network
-from wireguard_tools import WireguardKey
 from sqlalchemy.types import Text
-
+from wireguard_tools import WireguardKey
+from ipaddress import IPv4Address, IPv4Network
+from sqlmodel import Field, SQLModel, create_engine
 
 class DeviceTunnel(SQLModel, table=True):
     """ Represents the database table on a device, where each row
@@ -60,7 +62,19 @@ class DeviceTunnel(SQLModel, table=True):
             peers=peers,
         )
 
+SQLITE_DB = os.getenv("SQLITE_DB", "/var/lib/support_tunnel/device.db")
+SQL_URI = f"sqlite:///{SQLITE_DB}"
 
-SQL_URI = getenv("SQL_URI", "sqlite:////var/lib/support_tunnel/device.db")
 engine = create_engine(SQL_URI)
 SQLModel.metadata.create_all(engine)
+
+try:
+    stat_result = os.stat(SQLITE_DB)
+    gid = getgrnam("support").gr_gid
+    if stat_result.st_gid != gid:
+        os.chown(SQLITE_DB, -1, gid)
+    if stat.filemode(stat_result.st_mode) != '-rw-rw----':
+        os.chmod(SQLITE_DB, 0o0660)
+except Exception as e:
+    error_msg = f"unable to set permissions on {SQLITE_DB}: {e}"
+    logging.warning(error_msg)

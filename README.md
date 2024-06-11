@@ -30,6 +30,12 @@ pip install -r requirements.txt
 
 ### `device`
 
+Create a `support` group. Certain functions require root, like opening a wireguard device. Others don't. We use a `support` group for the backing SQLite database to share this between both contexts. For any non-root user calling these services, add them to this group.
+
+```
+groupadd support
+```
+
 Request a tunnel on your `device`. If you are a Micro-Nova employee, this is more or less what the updater does when you press the "Request support tunnel" button.
 
 ```
