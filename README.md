@@ -5,7 +5,7 @@ This repo contains a secure implementation of a support tunnel. Its implementati
 It uses a couple of technologies:
 * [Fabric](https://www.fabfile.org/) - used to control the remote tunnel server
 * [Invoke](https://www.pyinvoke.org/) - used to run commands on localhost
-* [SQLModel](https://sqlmodel.tiangolo.com/) - a nice ORM from [tiangolo](https://github.com/tiangolo), built on [Pydantic](https://docs.pydantic.dev/latest/)
+* [SQLModel](https://sqlmodel.tiangolo.com/) - a nice ORM from [tiangolo](https://github.com/tiangolo), built on [Pydantic](https://docs.pydantic.dev/latest/) and [SQLAlchemy](https://www.sqlalchemy.org/)
 * [FastAPI](https://fastapi.tiangolo.com/) - a nice web framework from [tiangolo](https://github.com/tiangolo)
 
 ## How to use this
@@ -13,7 +13,7 @@ It uses a couple of technologies:
 Some quick terms:
 * `device` is the remote thing you'd like access to
 * `admin` is the support user's context, both on their local laptop and the launched tunnel server.
-* `api` is the API. It's main purpose is to do bookkeeping and exchange bootstrapping data.
+* `api` is the HTTP API that runs in the cloud. It's main purpose is to do bookkeeping and exchange bootstrapping data.
 
 ### Setup
 First, if this is a greenfield deployment, launch the cloud network and an instance of the API. See more detailed instructions in the `opentofu/README.md` documentation on how to accomplish this. If you're a Micro-Nova employee, you can skip this step.
