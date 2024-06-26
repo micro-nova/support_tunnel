@@ -273,10 +273,13 @@ def stop(c, tunnel_id: UUID4, tunnel_state: TunnelState = TunnelState.completed)
 
         # Let upstream know.
         # TODO: let upstream know the tunnel_state too
-        auth_headers = {"Authorization": f"Bearer {t.token}"}
-        res = api.delete(
-            f"{SUPPORT_TUNNEL_API}/device/tunnel/delete", headers=auth_headers, timeout=60)
-        res.raise_for_status()
+        # t.expires comes from the JWT expiry time; if we are expired, we don't bother to
+        # get back in touch with upstream since we can't even auth anymore.
+        if t.expires > datetime.now():
+            auth_headers = {"Authorization": f"Bearer {t.token}"}
+            res = api.delete(
+                f"{SUPPORT_TUNNEL_API}/device/tunnel/delete", headers=auth_headers, timeout=60)
+            res.raise_for_status()
 
 
 @task
