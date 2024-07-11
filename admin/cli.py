@@ -227,7 +227,7 @@ def stop(c, tunnel_id):
     gc(c)
 
 @task
-def connect(c, tunnel_id, command="/bin/bash"):
+def connect(c, tunnel_id, command="/bin/bash", pty=True):
     """ Connect to a remote device, identified by a tunnel. """
     # Care should be exercised here; we're taking data from a remote source and using it to
     # run shell commands. Validate every last bit of data.
@@ -265,9 +265,9 @@ def connect(c, tunnel_id, command="/bin/bash"):
     )
 
     # and finally execute a shell
-    device.sudo(command, pty=True)
+    device.sudo(command, pty=pty)
 
 @task
 def command(c, tunnel_id, command):
     """ Run an arbitrary command on the remote device """
-    connect(c, tunnel_id, command)
+    connect(c, tunnel_id, command, pty=False)
