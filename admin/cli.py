@@ -70,8 +70,8 @@ def get_tunnel(tunnel_id) -> Optional[dict]:
 
 
 @task
-def get(c, tunnel_id):
-    """ Get a single tunnel """
+def show(c, tunnel_id):
+    """ Show a single tunnel's details """
     t = get_tunnel(tunnel_id)
     print(json.dumps(t))
 
@@ -227,7 +227,7 @@ def stop(c, tunnel_id):
     gc(c)
 
 @task
-def connect(c, tunnel_id):
+def connect(c, tunnel_id, command="/bin/bash"):
     """ Connect to a remote device, identified by a tunnel. """
     # Care should be exercised here; we're taking data from a remote source and using it to
     # run shell commands. Validate every last bit of data.
@@ -265,4 +265,9 @@ def connect(c, tunnel_id):
     )
 
     # and finally execute a shell
-    device.sudo("/bin/bash", pty=True)
+    device.sudo(command, pty=True)
+
+@task
+def command(c, tunnel_id, command):
+    """ Run an arbitrary command on the remote device """
+    connect(c, tunnel_id, command)

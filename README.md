@@ -60,8 +60,9 @@ To note, your public key may live someplace else or be in a different format; pl
 fab --list # see what commands are available
 # create the tunnel server, using the preshared key and tunnel id from the device
 fab create
-fab get $TUNNEL_ID
+fab show $TUNNEL_ID
 fab connect $TUNNEL_ID
+fab command $TUNNEL_ID 'cat /etc/hostname'
 ```
 
 The above takes a while. When it completes though, you should be logged in as root on the remote device!
