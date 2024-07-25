@@ -1,12 +1,17 @@
+import os
 import json
 import random
 import logging
+import subprocess
+import configparser
 
 from jose import jwt
 from os import getenv
 from uuid import UUID
 from time import sleep
+from pathlib import Path
 from datetime import datetime
+from ipaddress import IPv4Network
 
 from invoke import task
 from pydantic import UUID4
@@ -15,6 +20,7 @@ from requests import HTTPError
 from sqlmodel import Session, select
 from wireguard_tools import WireguardKey
 
+from common.tunnel import device_ip
 from common.crypto import open_secret_box
 from device.local_context import LocalContext
 from device.models import DeviceTunnel, engine
@@ -23,12 +29,38 @@ from common.util import api, create_user, delete_user, add_authorized_key
 from common.tunnel import allocate_address_space, write_wireguard_config, start_wireguard_tunnel
 from common.models import TunnelRequest, TunnelRequestTokenData, Token, TunnelServerLaunchDetailsResponse, DeviceTunnelLaunchDetails, TunnelState
 
+config = configparser.ConfigParser()
+potential_config_files = [
+    Path("/etc/support_tunnel/config.ini")
+]
+def check_file_permissions(path):
+    """ Checks if the file permissions are restrictive enough, to prevent privilege escalation. """
+    try:
+        group_write = 0b000010000
+        other_write = 0b000000010
+        stat = os.stat(path)
+        error_msg = f"Incorrect permissions on file {path}; please ensure this file is owned by root and only writable by the owner."
+        if stat.st_mode & group_write or stat.st_mode & other_write or stat.st_uid != 0:
+            logging.warn(error_msg)
+            return False
+        return True
+    except Exception as e:
+        # One common reason would be the file not existing.
+        logging.warn(f"unable to check file permissions: {e}")
+        return False
+
+config.read([path for path in potential_config_files if check_file_permissions(path)])
+# if both configs are messed up, at least ensure have our anticipated device section
+if not config.has_section("device"):
+    logging.warn("no default device section in any configuration! using only defaults.")
+    config.add_section("device")
+
 SUPPORT_TUNNEL_API = getenv(
     "SUPPORT_TUNNEL_API",
-    "https://support-tunnel.prod.gcp.amplipi.com/v1/"
+    config['device'].get('api', 'https://support-tunnel.prod.gcp.amplipi.com/v1/')
 )
 
-DEBUG = getenv("DEBUG", False)  # any value set here will turn on debug
+DEBUG = getenv("DEBUG", config['device'].getboolean('debug', False))
 
 logging_handlers = [
   journal.JournalHandler(SYSLOG_IDENTIFIER='support_tunnel'),
@@ -45,6 +77,29 @@ def print_log_error(e: Exception, msg: str):
     error_msg = f"{msg}: {e}"
     logging.error(error_msg)
     print(error_msg)
+
+def template_config_string(config_string: str, tunnel: DeviceTunnel) -> str:
+    """ Templates a config string. See defaults.ini for details. """
+    return config_string.format(
+        id=tunnel.tunnel_id,
+        ip=device_ip(IPv4Network(tunnel.network)).ip,
+        iface=tunnel.interface,
+        net=tunnel.network,
+        user=tunnel.support_user
+    )
+
+def run_script_hook(script_string: str, tunnel: DeviceTunnel):
+    """ Runs a script hook, like `pre-up-script` from the config file. Passes
+        the string through a templater first and then runs it. """
+    try:
+        s = template_config_string(script_string, tunnel)
+        if not check_file_permissions(s.split()[0]):
+            logging.warning(f"refusing to run {s.split()[0]} due to insecure file permissions")
+            return
+        subprocess.run(s.split(), timeout=120)
+    except Exception as e:
+        # it's best to just continue executing; a misconfiguration could prevent tunnels.
+        print_log_error(e, "failure running script hook")
 
 
 def get_device_tunnel(tunnel_id: UUID4, sesh: Session) -> DeviceTunnel:
@@ -234,6 +289,10 @@ def connect(original_context, tunnel_id: UUID4):
         with Session(engine) as sesh:
             t2 = get_device_tunnel(tunnel_id, sesh)
 
+            # run pre-up script
+            if 'pre-up-script' in config['device']:
+                run_script_hook(config['device']['pre-up-script'], t2)
+
             # create our config
             write_wireguard_config(c, t2.to_WireguardTunnel())
 
@@ -248,6 +307,10 @@ def connect(original_context, tunnel_id: UUID4):
             # Let upstream know.
             send_connected_status_to_api(t2)
 
+            # run post-up script
+            if 'post-up-script' in config['device']:
+                run_script_hook(config['device']['post-up-script'], t2)
+
     except Exception as e:
         logging.error(f"unexpected error: {e}")
         logging.error("exiting.")
@@ -258,6 +321,10 @@ def stop(c, tunnel_id: UUID4, tunnel_state: TunnelState = TunnelState.completed)
     """ Stops & cleans up device-side resources associated with a tunnel """
     with Session(engine) as sesh:
         t = get_device_tunnel(tunnel_id, sesh)
+
+        # run pre-down script
+        if 'pre-down-script' in config['device']:
+            run_script_hook(config['device']['pre-down-script'], t)
 
         if t.support_user:
             delete_user(c, t.support_user)
@@ -281,6 +348,11 @@ def stop(c, tunnel_id: UUID4, tunnel_state: TunnelState = TunnelState.completed)
             res = api.delete(
                 f"{SUPPORT_TUNNEL_API}/device/tunnel/delete", headers=auth_headers, timeout=60)
             res.raise_for_status()
+
+        # run post-down script
+        if 'post-down-script' in config['device']:
+            run_script_hook(config['device']['post-down-script'], t)
+
 
 
 @task

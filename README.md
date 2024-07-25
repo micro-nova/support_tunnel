@@ -45,6 +45,8 @@ inv request-and-connect-tunnel      # there are also separate request and connec
 ```
 This will print both a tunnel ID and a preshared key. These should be transmitted to the `admin` out of band, likely through a typical support channel.
 
+The `device` context supports a configuration file at `/etc/support_tunnel/config.ini`. An example config with comments is available at `device/example_config.ini`.
+
 ### `admin`
 
 On your `admin`, you probably need to log in to a cloud provider so you can start and configure instances. For Micro-Nova, this is Google Cloud Platform. Install the [`gcloud` utility](https://cloud.google.com/sdk/docs/install-sdk) and run these steps:
