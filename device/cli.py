@@ -4,6 +4,7 @@ import logging
 
 from jose import jwt
 from os import getenv
+from uuid import UUID
 from time import sleep
 from datetime import datetime
 
@@ -94,10 +95,10 @@ def request(c) -> UUID4:
 
         # TODO: better data validation here; perhaps make these two derived values/methods off the token
         # removeprefix() was introduced in Python 3.9; uncomment this when we upgrade on AmpliPi
-        # tunnel_id = loaded_response.sub.removeprefix("tunnel_id:")
-        tunnel_id = loaded_response.sub[len("tunnel_id:"):]
+        # tunnel_id_str = loaded_response.sub.removeprefix("tunnel_id:")
+        tunnel_id_str = loaded_response.sub[len("tunnel_id:"):]
         expires = datetime.fromtimestamp(loaded_response.exp)
-        logging.debug(f"tunnel_id: {tunnel_id}, expires: {expires}")
+        logging.debug(f"tunnel_id: {tunnel_id_str}, expires: {expires}")
     except Exception as e:
         print_log_error(e, "unable to set token data")
         raise e
@@ -118,7 +119,7 @@ def request(c) -> UUID4:
         logging.info(
             "creating a DeviceTunnel instance and saving it to the database")
         t = DeviceTunnel(
-            tunnel_id=tunnel_id,
+            tunnel_id=UUID(hex=tunnel_id_str),
             interface=interface,
             device_wg_public_key=str(device_wg_public_key),
             device_wg_private_key=str(device_wg_private_key),
