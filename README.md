@@ -18,6 +18,8 @@ Some quick terms:
 ### Setup
 First, if this is a greenfield deployment, launch the cloud network and an instance of the API. See more detailed instructions in the `opentofu/README.md` documentation on how to accomplish this. If you're a Micro-Nova employee, you can skip this step.
 
+If you're a Windows user taking the role of `admin`, ensure you've got [WSL](https://www.microsoft.com/store/productId/9PDXGNCFSCZV?ocid=pdpshare) installed and set to [mirrored networking mode](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking), and have a browser of your choice installed within WSL (for example, running `sudo apt install firefox`). Note that without mirrored networking, you may not be able to properly authenticate, and without a browser you will not be able to sign in in the first place.
+
 Then, on both the device you'd like a tunnel on and on your admin computer:
 ```
 apt install libsystemd-dev wireguard wireguard-tools
@@ -59,7 +61,7 @@ To note, your public key may live someplace else or be in a different format; pl
 
 
 ```
-fab --list # see what commands are available
+fab --list # see what commands are e
 # create the tunnel server, using the preshared key and tunnel id from the device
 fab create
 fab show $TUNNEL_ID
