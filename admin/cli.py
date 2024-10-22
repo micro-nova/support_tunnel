@@ -3,7 +3,7 @@ import json
 import random
 import logging
 
-from os import getenv
+from os import getenv, path
 from uuid import UUID
 from time import sleep
 from typing import Optional
@@ -143,7 +143,7 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
             connect_kwargs={"auth_timeout": 120} # long for 2FA
         )
 
-        # things get hacky when being concerned with local ssh keys and all - 
+        # things get hacky when being concerned with local ssh keys and all -
         # the below configures things to "just work", every time.
         c.run("gcloud compute config-ssh", hide="both")
         user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
@@ -266,6 +266,87 @@ def connect(c, tunnel_id, command="/bin/bash", pty=True):
 
     # and finally execute a shell
     device.sudo(command, pty=pty)
+
+@task
+def sfile(c, tunnel_id, local, remote):
+    """ Connect to a remote device and collect a remote file to the local. """
+    # Care should be exercised here; we're taking data from a remote source and using it to
+    # run shell commands. Validate every last bit of data.
+    t = get_tunnel(tunnel_id)
+    assert TunnelState(t['state']) == TunnelState.running, "Device has not yet connected"
+    dip = device_ip(IPv4Network(t['network'])).ip
+    assert t['support_user'].isalnum()
+    assert t['support_user'].isascii()
+    support_user = t['support_user']
+
+    # set up local
+    c.run("gcloud compute config-ssh", hide="both")
+    user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
+    ts_user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
+
+    # set up connection to bastion
+    ts = Connection(
+        host = str(get_ts_instance_public_ip(tunnel_id)),
+        user = ts_user,
+        connect_kwargs={"auth_timeout": 120} # long for 2FA
+    )
+
+    # grab the ssh private key on the tunnel server
+    ssh_privkey = ts.run(f"sudo cat {SSH_KEYFILE_PATH}", hide="both")
+    assert ssh_privkey
+
+    # set up connection to destination device
+    device = Connection(
+        host=str(dip),
+        user=support_user,
+        gateway=ts,
+        connect_kwargs = {
+            "pkey": Ed25519Key.from_private_key(io.StringIO(ssh_privkey.stdout)),
+        }
+    )
+    # Support user lacks permissions to send file to just any directory, scrape the filename and send to an intermediary and then sudo mv it to the proper location
+    temp_remote = f"/tmp/{path.basename(remote)}"
+    device.put(local=local, remote=temp_remote, preserve_mode=True)
+    device.sudo(f"mv {temp_remote} {remote}", pty=False)
+
+@task
+def gfile(c, tunnel_id, remote, local):
+    """ Connect to a remote device and collect a remote file to the local. """
+    # Care should be exercised here; we're taking data from a remote source and using it to
+    # run shell commands. Validate every last bit of data.
+    t = get_tunnel(tunnel_id)
+    assert TunnelState(t['state']) == TunnelState.running, "Device has not yet connected"
+    dip = device_ip(IPv4Network(t['network'])).ip
+    assert t['support_user'].isalnum()
+    assert t['support_user'].isascii()
+    support_user = t['support_user']
+
+    # set up local
+    c.run("gcloud compute config-ssh", hide="both")
+    user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
+    ts_user = json.loads(user_from_oslogin.stdout)['posixAccounts'][0]['username']
+
+    # set up connection to bastion
+    ts = Connection(
+        host = str(get_ts_instance_public_ip(tunnel_id)),
+        user = ts_user,
+        connect_kwargs={"auth_timeout": 120} # long for 2FA
+    )
+
+    # grab the ssh private key on the tunnel server
+    ssh_privkey = ts.run(f"sudo cat {SSH_KEYFILE_PATH}", hide="both")
+    assert ssh_privkey
+
+    # set up connection to destination device
+    device = Connection(
+        host=str(dip),
+        user=support_user,
+        gateway=ts,
+        connect_kwargs = {
+            "pkey": Ed25519Key.from_private_key(io.StringIO(ssh_privkey.stdout)),
+        }
+    )
+    device.get(local=local, remote=remote, preserve_mode=True)
 
 @task
 def command(c, tunnel_id, command):
