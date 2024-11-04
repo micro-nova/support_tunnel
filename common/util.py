@@ -59,7 +59,7 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
     # Because we have an explicit dependency on the specified group existing, we call create_group() here.
     create_group(c)
 
-    c.run(f"sudo useradd -g {group_name} -s $(which bash) -m {name}")
+    c.run(f"sudo useradd -g {group_name} -s $(which bash) -p '*' -m {name}")
 
     return SupportUser(username=name, group=group_name)
 
