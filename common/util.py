@@ -59,6 +59,10 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
     # Because we have an explicit dependency on the specified group existing, we call create_group() here.
     create_group(c)
 
+    # Make an account with a disabled password, forcing use of SSH keys
+    # See https://arlimus.github.io/articles/usepam/
+    # (archived at https://web.archive.org/web/20240627131308/https://arlimus.github.io/articles/usepam/)
+    # for more details 
     c.run(f"sudo useradd -g {group_name} -s $(which bash) -p '*' -m {name}")
 
     return SupportUser(username=name, group=group_name)
