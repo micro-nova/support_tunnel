@@ -11,4 +11,7 @@ resource "google_compute_project_metadata" "enable_oslogin" {
     enable-oslogin     = "TRUE"
     enable-oslogin-2fa = "TRUE"
   }
+  lifecycle {
+    ignore_changes = [metadata]
+  }
 }

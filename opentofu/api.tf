@@ -27,36 +27,28 @@ resource "google_project_iam_custom_role" "api_compute" {
   ]
 }
 
-resource "google_project_iam_binding" "api_compute" {
+resource "google_project_iam_member" "api_compute" {
   project = data.google_project.project.project_id
   role    = google_project_iam_custom_role.api_compute.name
-  members = [
-    "serviceAccount:${google_service_account.api.email}"
-  ]
+  member = "serviceAccount:${google_service_account.api.email}"
 }
 
-resource "google_project_iam_binding" "api_sql_instance_user" {
+resource "google_project_iam_member" "api_sql_instance_user" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.instanceUser"
-  members = [
-    "serviceAccount:${google_service_account.api.email}"
-  ]
+  member = "serviceAccount:${google_service_account.api.email}"
 }
 
-resource "google_project_iam_binding" "api_sql_client" {
+resource "google_project_iam_member" "api_sql_client" {
   project = data.google_project.project.project_id
   role    = "roles/cloudsql.client"
-  members = [
-    "serviceAccount:${google_service_account.api.email}"
-  ]
+  member = "serviceAccount:${google_service_account.api.email}"
 }
 
-resource "google_project_iam_binding" "api_secrets_manager" {
+resource "google_project_iam_member" "api_secrets_manager" {
   project = data.google_project.project.project_id
   role    = "roles/secretmanager.secretAccessor"
-  members = [
-    "serviceAccount:${google_service_account.api.email}"
-  ]
+  member = "serviceAccount:${google_service_account.api.email}"
 }
 
 resource "random_password" "jwt_secret" {
