@@ -1,6 +1,7 @@
 import logging
 
 from os import getenv
+from typing import List
 from ipaddress import IPv4Address
 
 from pydantic import UUID4
@@ -34,7 +35,7 @@ def get_ts_instance(tunnel_id: UUID4) -> compute_v1.Instance:
     instance_client = compute_v1.InstancesClient()
     return instance_client.get(project=PROJECT_ID, zone=ZONE, instance=f"{INSTANCE_NAME_PREFIX}-{tunnel_id}")
 
-def list_ts_instances() -> list[compute_v1.Instance]:
+def list_ts_instances() -> List[compute_v1.Instance]:
     """ Lists tunnel server instances. At present, it just uses the 
         INSTANCE_NAME_PREFIX to determine if it is a tunnel server.
     """
@@ -53,7 +54,7 @@ def _create_ts_boot_disk() -> compute_v1.AttachedDisk:
     disk.boot = True
     return disk
 
-def _create_ts_network_interfaces() -> list[compute_v1.NetworkInterface]:
+def _create_ts_network_interfaces() -> List[compute_v1.NetworkInterface]:
     """ create a list of network interface descriptions """
     # create network interface & external access configs
     netiface = compute_v1.NetworkInterface()
