@@ -17,6 +17,6 @@ systemd-python
 wireguard-tools
 sqlmodel==0.0.19
 google-cloud-compute
-cryptography==42.0.8
+cryptography==43.0.3
 google-cloud-secret-manager
 cloud-sql-python-connector[pymysql]
