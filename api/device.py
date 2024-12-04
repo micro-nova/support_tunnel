@@ -50,7 +50,8 @@ def get_tunnel_id(token: str = Depends(oauth2_scheme)) -> UUID:
     try:
         payload = TunnelRequestTokenData(
             **jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO]))
-        tunnel_id_str = payload.sub.removeprefix("tunnel_id:")
+        prefix_len = len("tunnel_id:")
+        tunnel_id_str = payload.sub[prefix_len:]
         logging.debug(f"tunnel_id_str: {tunnel_id_str}")
         tunnel_id = UUID(hex=tunnel_id_str)
     except JWTError:
