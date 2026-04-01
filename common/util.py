@@ -26,6 +26,14 @@ retries = Retry(
 )
 api.mount("https://", HTTPAdapter(max_retries=retries))
 
+def removeprefix(prefix: str, string: str) -> str:
+    slice = len(prefix)
+    print(string[:slice])
+    if string[:slice] == prefix:
+        return string[slice:]
+    else:
+        return string
+
 def create_group(c: Union[LocalContext, Connection], group_name: str = "support"):
     """ Creates a group for the support user(s). """
     logging.debug(f"creating a Unix group: {group_name}")
@@ -62,7 +70,7 @@ def create_user(c: Union[LocalContext, Connection], username: Optional[str] = No
     # Make an account with a disabled password, forcing use of SSH keys
     # See https://arlimus.github.io/articles/usepam/
     # (archived at https://web.archive.org/web/20240627131308/https://arlimus.github.io/articles/usepam/)
-    # for more details 
+    # for more details
     c.run(f"sudo useradd -g {group_name} -s $(which bash) -p '*' -m {name}")
 
     return SupportUser(username=name, group=group_name)

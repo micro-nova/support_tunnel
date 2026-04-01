@@ -19,7 +19,7 @@ from wireguard_tools import WireguardKey
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from common.crypto import create_secret_box
-from common.util import api, project_id, create_sshkey
+from common.util import api, project_id, create_sshkey, removeprefix
 from common.constants import INSTANCE_NAME_PREFIX, SSH_KEYFILE_PATH
 from common.tunnel import write_wireguard_config, start_wireguard_tunnel, device_ip, server_ip
 from admin.cloud import create_ts_instance, list_ts_instances, get_ts_instance_public_ip, destroy_ts_resources
@@ -143,7 +143,7 @@ def create(c, tunnel_id: Optional[UUID4] = None, preshared_key: Optional[Wiregua
             connect_kwargs={"auth_timeout": 120} # long for 2FA
         )
 
-        # things get hacky when being concerned with local ssh keys and all - 
+        # things get hacky when being concerned with local ssh keys and all -
         # the below configures things to "just work", every time.
         c.run("gcloud compute config-ssh", hide="both")
         user_from_oslogin = c.run("gcloud compute os-login describe-profile --format=json", hide="both")
@@ -209,7 +209,7 @@ def gc(c):
     # find all server resources not associated with a running Tunnel
     running_nodes = list_ts_instances()
     for n in running_nodes:
-        tunnel_id = n.name.removeprefix(f"{INSTANCE_NAME_PREFIX}-")
+        tunnel_id = removeprefix(f"{INSTANCE_NAME_PREFIX}-", n.name)
         t = get_tunnel(tunnel_id)
         if not t or t['state'] in [TunnelState.completed, TunnelState.timedout]:
             print(
